@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>玥时之肤运营系统</title>
+  <link rel="stylesheet" href="./styles.css?v=20260704-fast-evidence-v2" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="topbar">
+        <div>
+          <span class="brand-kicker">YUESHI SKIN OPS</span>
+          <h1>玥时之肤运营系统</h1>
+          <p>上传一条视频，自动判断能不能投，并给出改稿文案</p>
+          <div class="mobile-hero-meta">
+            <span>预计 30-90 秒生成</span>
+            <span>联系XXXX</span>
+          </div>
+        </div>
+        <div class="top-actions">
+          <span class="contact-chip">联系XXXX</span>
+          <button id="analyzeBtn" class="button primary">开始分析</button>
+          <button id="copyBtn" class="button secondary">复制结果</button>
+        </div>
+      </header>
+
+      <section class="flowbar" aria-label="产品流程">
+        <div class="flow-node active">1 上传视频</div>
+        <div class="flow-node active">2 智能识别</div>
+        <div class="flow-node active">3 输出建议</div>
+        <div class="flow-node">4 投前审核</div>
+      </section>
+
+      <section class="layout">
+        <input id="mobileEvidenceToggle" class="mobile-evidence-toggle" type="checkbox" />
+        <label class="mobile-evidence-control" for="mobileEvidenceToggle">
+          <span class="evidence-closed">查看执行标准</span>
+          <span class="evidence-open">收起执行标准</span>
+          <small>成品文案结构、吸引人群、投前标准</small>
+        </label>
+
+        <aside class="left-panel">
+          <section class="panel video-panel">
+            <div class="panel-head">
+              <h2>上传视频</h2>
+              <span id="videoState" class="pill muted">待导入</span>
+            </div>
+            <label class="dropbox" for="videoInput" id="videoDrop">
+              <input id="videoInput" type="file" accept="video/*" />
+              <strong>导入视频</strong>
+              <span id="videoName">拖入视频，或点击选择文件</span>
+              <small>建议 30-45 秒，最大 100MB；视频越短识别越快</small>
+            </label>
+            <div id="uploadWarning" class="upload-warning" hidden></div>
+            <div class="mobile-upload-note">上传后自动生成投前判断、优化建议和成品文案</div>
+            <div class="mobile-result-preview" aria-label="生成结果预览">
+              <article>
+                <strong>投前判断</strong>
+                <span>判断能不能投</span>
+              </article>
+              <article>
+                <strong>修改建议</strong>
+                <span>告诉你怎么改</span>
+              </article>
+              <article>
+                <strong>成品文案</strong>
+                <span>可直接复制</span>
+              </article>
+            </div>
+            <video id="videoPreview" class="video-preview" controls playsinline></video>
+          </section>
+
+          <section class="panel frame-panel">
+            <div class="panel-head">
+              <h2>画面拆解</h2>
+              <button id="captureBtn" class="button small">重新截帧</button>
+            </div>
+            <div id="frameStrip" class="frame-strip empty">导入视频后自动抽取画面拆解</div>
+          </section>
+
+          <section class="panel understanding-panel" id="understandingPanel">
+            <div class="panel-head">
+              <h2>
+                <span class="desktop-title">视频理解输入</span>
+                <span class="mobile-title">识别进度</span>
+              </h2>
+              <span id="recognitionState" class="pill neutral">系统自动识别</span>
+            </div>
+            <div id="understandingLoading" class="loading-layer" hidden>
+              <span class="spinner"></span>
+              <strong>正在识别视频内容</strong>
+              <p>系统正在转写普通话口播、抽取画面拆解并整理拍摄素材</p>
+            </div>
+            <div class="recognition-actions">
+              <button id="transcribeBtn" class="button small">重新识别口播</button>
+              <button id="visionBtn" class="button small">重新识别画面</button>
+            </div>
+            <label>
+              口播 / 字幕文案
+              <span id="transcriptState" class="field-state">导入视频后自动识别，可人工校正</span>
+              <textarea id="transcriptInput" placeholder="系统会自动识别视频里的口播和字幕，识别后可在这里校正。"></textarea>
+            </label>
+            <label>
+              画面观察
+              <span id="visualState" class="field-state">导入视频后按顺序生成拍摄素材</span>
+              <div id="visualFormula" class="formula visual-formula"></div>
+              <div id="visualRows" class="structure-rows visual-rows"></div>
+              <textarea id="visualInput" class="hidden-source" placeholder="系统会根据画面拆解和本地生活场景词自动生成拍摄素材。"></textarea>
+            </label>
+          </section>
+        </aside>
+
+        <section class="workspace">
+          <section class="panel verdict-panel">
+            <div class="panel-head">
+              <h2>投前判断</h2>
+              <span id="verdictBadge" class="pill warning">等待生成</span>
+            </div>
+            <div class="verdict-grid">
+              <div class="score-box">
+                <span>视频投前分</span>
+                <strong id="scoreValue">--</strong>
+              </div>
+              <div class="meter"><div id="scoreBar"></div></div>
+              <p id="verdictText">导入视频并补充文案后，生成是否适合投放的预审核结论。</p>
+            </div>
+            <div id="riskList" class="risk-list"></div>
+            <div class="verdict-subhead">
+              <h3>执行标准</h3>
+              <span class="pill neutral">文案 + 画面完成后生成</span>
+            </div>
+            <div id="metricGrid" class="metric-grid verdict-metrics"></div>
+          </section>
+
+          <section class="panel script-panel">
+            <div class="panel-head">
+              <h2>脚本结构</h2>
+              <span class="pill neutral">对应来客：脚本结构</span>
+            </div>
+            <div id="structureFormula" class="formula"></div>
+            <div id="structureRows" class="structure-rows"></div>
+          </section>
+
+          <section class="panel intent-panel">
+            <div class="panel-head">
+              <h2>营销意图</h2>
+              <span class="pill neutral">对应来客：营销意图</span>
+            </div>
+            <div id="intentGrid" class="intent-grid"></div>
+          </section>
+
+          <section class="panel audience-panel">
+            <div class="panel-head">
+              <h2>吸引人群</h2>
+              <span class="pill neutral">对应来客：洞察分析</span>
+            </div>
+            <div id="audienceGrid" class="audience-grid"></div>
+          </section>
+
+        </section>
+
+        <aside class="right-panel">
+          <section class="panel report-panel">
+            <div class="panel-head">
+              <h2>改稿方案</h2>
+            </div>
+            <div id="actionList" class="action-list"></div>
+            <div id="rewriteCards" class="rewrite-cards"></div>
+            <textarea id="reportOutput" readonly></textarea>
+          </section>
+        </aside>
+      </section>
+    </main>
+
+    <canvas id="captureCanvas" hidden></canvas>
+  <script src="./config.js?v=20260704-fast-evidence-v2"></script>
+  <script src="./app.js?v=20260704-fast-evidence-v2"></script>
+  </body>
+</html>
