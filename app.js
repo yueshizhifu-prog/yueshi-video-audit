@@ -758,13 +758,27 @@ function normalizeRemoteMetrics(preflight, fallback) {
 }
 
 function normalizeRemoteVerdict(preflight, metrics) {
-  const label = cleanFallback(preflight && preflight.label, metrics.score >= 80 ? "建议投放" : metrics.score >= 60 ? "先改再测" : "不建议投放");
-  const text = cleanFallback(preflight && preflight.text, "百炼已根据文案、画面、声音和结构生成投前判断。");
+  const rawLabel = cleanFallback(preflight && preflight.label, metrics.score >= 80 ? "可小额测试" : metrics.score >= 60 ? "先优化再测" : "先补关键素材");
+  const label = softenVerdictLabel(rawLabel, metrics.score);
+  const text = cleanFallback(preflight && preflight.text, buildSoftVerdictText(metrics.score));
   return {
     label,
     text,
     className: metrics.score >= 80 ? "good" : metrics.score >= 60 ? "warning" : "danger",
   };
+}
+
+function softenVerdictLabel(label, score) {
+  if (/不建议|不能投|很差|失败/.test(label)) return "先补关键素材";
+  if (/建议投放/.test(label)) return score >= 82 ? "可小额放量" : "可小额测试";
+  if (/先改/.test(label)) return "先优化再测";
+  return label || "待判断";
+}
+
+function buildSoftVerdictText(score) {
+  if (score >= 80) return "素材已经具备试投基础，建议先小预算验证流速、点击率和支付成本。";
+  if (score >= 60) return "素材有可用部分，但还需要补强信息充分度、画面证明或团购承接，再进入投放测试。";
+  return "这条素材不是不能用，当前更适合先补关键素材和成交信息，再用小预算验证。";
 }
 
 function normalizeRemoteRisks(preflight, fallback) {
@@ -1171,16 +1185,95 @@ function scoreExecutionStandards(structure, transcript, visual) {
   };
 }
 
+function buildReadinessDisplay(score) {
+  if (!Number.isFinite(Number(score)) || score <= 0) {
+    return { text: "待识别", width: 0, colorScore: 0, labelClass: true };
+  }
+  if (score >= 82) return { text: "可放量", width: 90, colorScore: 86, labelClass: true };
+  if (score >= 68) return { text: "可试投", width: 78, colorScore: 76, labelClass: true };
+  if (score >= 50) return { text: "可优化", width: 64, colorScore: 62, labelClass: true };
+  return { text: "待补强", width: 52, colorScore: 52, labelClass: true };
+}
+
+function scoreToTone(score) {
+  if (score >= 78) return "优势";
+  if (score >= 58) return "可用";
+  return "待补强";
+}
+
+function buildDimensionEvaluation(result) {
+  const structure = result.structure;
+  const intent = result.intent || [];
+  const metrics = result.metrics;
+  const visual = result.visual || { formula: [], text: "" };
+  const intentMap = Object.fromEntries(intent);
+  const allText = `${result.transcript || ""}\n${visual.text || ""}\n${structure.formula.join(" ")}\n${intent.map((row) => row.join(" ")).join(" ")}`;
+  const hasPrice = /([0-9]+(\.[0-9]+)?元|团购|套餐|次卡|券|折|优惠|权益)/.test(allText);
+  const hasBooking = /预约|下单|团购|链接|到店|核销|购买|领取/.test(allText);
+  const hasScene = /适合|上班|宝妈|女生|学生|情侣|附近|到店|周末|熬夜|通勤|聚会/.test(allText) || cleanFallback(intentMap["适用场景"], "");
+  const hasTrust = /门头|门店|技师|顾客|过程|检测|服务|评价|真实|到店|环境/.test(allText);
+  const infoHits = [
+    cleanFallback(intentMap["推广商品"], ""),
+    cleanFallback(intentMap["产品卖点"], ""),
+    cleanFallback(intentMap["用户痛点"], ""),
+    hasPrice ? "价格权益" : "",
+    hasScene ? "人群场景" : "",
+  ].filter(Boolean).length;
+
+  const hookScore = structure.hasPainOpening || structure.hasBenefitOpening ? 78 : 52;
+  const infoScore = Math.min(92, 42 + infoHits * 10);
+  const pictureScore = Math.round((metrics.clarityScore + metrics.densityScore) / 2);
+  const audioScore = metrics.audioScore;
+  const dealScore = (hasPrice ? 38 : 0) + (hasBooking ? 34 : 0) + (structure.formula.includes("团购转化") ? 18 : 0);
+  const trustScore = (hasTrust ? 72 : 48) + (visual.formula.length >= 4 ? 10 : 0);
+
+  return [
+    {
+      title: "首屏吸引",
+      score: hookScore,
+      body: hookScore >= 70 ? "开头已有停留理由，继续把痛点或利益点说具体。" : "不是不能用，建议把用户问题或结果利益提前到前三秒。",
+    },
+    {
+      title: "信息充分",
+      score: infoScore,
+      body: infoScore >= 70 ? "商品、痛点或卖点信息较完整，可以继续补权益细节。" : "需要补清楚卖什么、解决什么、适合谁、为什么现在买。",
+    },
+    {
+      title: "画面体验",
+      score: pictureScore,
+      body: pictureScore >= 70 ? "画面有可用基础，继续提高服务过程和细节密度。" : "建议补连续服务过程、细节特写和顾客状态，不只拍环境。",
+    },
+    {
+      title: "声音字幕",
+      score: audioScore,
+      body: audioScore >= 70 ? "口播/字幕能承接信息，适合继续优化表达顺序。" : "建议增加清晰字幕或更完整口播，降低用户理解成本。",
+    },
+    {
+      title: "团购承接",
+      score: dealScore,
+      body: dealScore >= 70 ? "团购动作基本可识别，继续把价格/权益前置。" : "要补价格、权益、预约或到店动作，让用户知道下一步怎么成交。",
+    },
+    {
+      title: "信任证明",
+      score: trustScore,
+      body: trustScore >= 70 ? "真实场景和服务证明有基础，适合继续加强顾客体验。" : "建议补门店、技师服务、顾客体验或效果反馈来增加信任。",
+    },
+  ].map((item) => ({
+    ...item,
+    tone: scoreToTone(item.score),
+  }));
+}
+
 function inferVerdict(metrics) {
   const score = metrics.score;
   const weakest = Math.min(metrics.structureScore, metrics.clarityScore, metrics.audioScore, metrics.densityScore);
   if (score >= 78) {
-    return { label: "可小额放量", className: "good", text: "结构可拆、声音可识别、画面清晰且画面密度够，可以小预算验证。" };
+    return { label: "可小额放量", className: "good", text: "结构、画面和团购承接已经具备测试基础，建议先小预算验证流速、点击率和支付成本。" };
   }
   if (score >= 58 && weakest >= 45) {
-    return { label: "先改再测", className: "warning", text: "视频方向可用，但结构、声音、画面清晰度或画面密集度还有一项需要补强。" };
+    return { label: "先优化再测", className: "warning", text: "视频里有可用资产，但还需要补强信息充分度、画面证明或团购收口，再进入投放测试。" };
   }
-  return { label: "先改素材", className: "danger", text: "视频没有形成清晰框架，或声音/画面/密度不足，直接投流容易放大问题。" };
+  return { label: "先补关键素材", className: "danger", text: "当前不是判定素材失败，而是关键购买信息还不够完整；先补首屏、服务过程或团购权益，再小预算验证。" };
 }
 
 function inferRisks(structure, intent, metrics, transcript, visual) {
@@ -1505,6 +1598,7 @@ function renderVerdict(result) {
   if (!result.ready) {
     elements.verdictBadge.textContent = "等待识别";
     elements.verdictBadge.className = "pill neutral";
+    elements.scoreValue.classList.remove("score-label");
     elements.scoreValue.textContent = "--";
     elements.scoreBar.style.width = "0";
     elements.scoreBar.style.background = "";
@@ -1515,9 +1609,11 @@ function renderVerdict(result) {
 
   elements.verdictBadge.textContent = result.verdict.label;
   elements.verdictBadge.className = `pill ${result.verdict.className}`;
-  elements.scoreValue.textContent = result.metrics.score;
-  elements.scoreBar.style.width = `${result.metrics.score}%`;
-  elements.scoreBar.style.background = scoreColor(result.metrics.score);
+  const display = buildReadinessDisplay(result.metrics.score);
+  elements.scoreValue.textContent = display.text;
+  elements.scoreValue.classList.toggle("score-label", display.labelClass);
+  elements.scoreBar.style.width = `${display.width}%`;
+  elements.scoreBar.style.background = scoreColor(display.colorScore);
   elements.verdictText.textContent = result.verdict.text;
   elements.riskList.innerHTML = result.risks.map(([title, detail]) => `
     <article class="risk-card">
@@ -1591,18 +1687,30 @@ function renderMetrics(metrics) {
 }
 
 function renderExecutionStandard(metrics, plan) {
-  if (!plan || !plan.execution.length) {
-    renderMetrics(metrics);
-    return;
-  }
-
-  elements.metricGrid.innerHTML = plan.execution.map((item) => `
+  const result = state.lastAnalysis || {};
+  const dimensions = result.ready ? buildDimensionEvaluation(result) : [];
+  const dimensionCards = dimensions.map((item) => `
     <article class="metric-card">
-      <span>步骤 ${escapeHtml(item.label)}</span>
+      <span>${escapeHtml(item.tone)}</span>
       <strong>${escapeHtml(item.title)}</strong>
       <p>${escapeHtml(item.body)}</p>
     </article>
   `).join("");
+
+  if (!plan || !plan.execution.length) {
+    elements.metricGrid.innerHTML = dimensionCards || "";
+    return;
+  }
+
+  const standardCards = plan.execution.slice(0, 4).map((item) => `
+    <article class="metric-card standard-card">
+      <span>执行 ${escapeHtml(item.label)}</span>
+      <strong>${escapeHtml(item.title)}</strong>
+      <p>${escapeHtml(item.body)}</p>
+    </article>
+  `).join("");
+
+  elements.metricGrid.innerHTML = dimensionCards + standardCards;
 }
 
 function renderActions(actions) {
