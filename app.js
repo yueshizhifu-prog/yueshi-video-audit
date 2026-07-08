@@ -32,12 +32,15 @@ const elements = {
   metricGrid: document.getElementById("metricGrid"),
   actionList: document.getElementById("actionList"),
   rewriteCards: document.getElementById("rewriteCards"),
+  benchmarkList: document.getElementById("benchmarkList"),
   reportOutput: document.getElementById("reportOutput"),
 };
 
 const runtimeConfig = {
   cloudAnalyzeUrl: String(window.YUESHI_CLOUD_ANALYZE_URL || "").trim(),
 };
+
+const officialBenchmarkUrl = "https://lifexue.com/case/list/marketvideo?enter_method=tab";
 
 const uploadRules = {
   maxBytes: 100 * 1024 * 1024,
@@ -1300,6 +1303,72 @@ function emptyRewritePlan() {
   return { cards: [], copy: [], execution: [], text: "" };
 }
 
+function buildBenchmarkGuidance(result) {
+  if (!result || !result.ready) {
+    return [
+      {
+        tag: "先看标准",
+        title: "官方案例库",
+        body: "导入视频前，可以先看官方案例里的开头、服务过程和团购收口，建立素材标准。",
+      },
+      {
+        tag: "看什么",
+        title: "不要只看画面好不好看",
+        body: "重点看一条视频是否能拆出“痛点-过程-卖点-下单”这条链路。",
+      },
+    ];
+  }
+
+  const risks = (result.risks || []).map(([title, detail]) => `${title} ${detail}`).join(" ");
+  const formula = result.structure && Array.isArray(result.structure.formula)
+    ? result.structure.formula.join(" ")
+    : "";
+  const visual = result.visual && Array.isArray(result.visual.formula)
+    ? result.visual.formula.join(" ")
+    : "";
+  const all = `${risks} ${formula} ${visual}`;
+  const cards = [];
+
+  if (/结构|框架|脚本|主线/.test(all) || (result.metrics && result.metrics.structureScore < 70)) {
+    cards.push({
+      tag: "对标 1",
+      title: "看官方案例怎么拆结构",
+      body: "打开案例后，先暂停拆顺序：开头先说什么，中段用什么画面证明，最后怎么引导团购。",
+    });
+  }
+  if (/开头|首屏|痛点|停留/.test(all) || !(result.structure && result.structure.hasPainOpening)) {
+    cards.push({
+      tag: "对标 2",
+      title: "看前三秒钩子",
+      body: "重点找美容美体案例的前 3 秒：是不是先点出脸干、卡粉、肩颈酸、黑头等用户问题。",
+    });
+  }
+  if (/画面|清晰|密集|过程|服务|证明|体验/.test(all) || (result.metrics && result.metrics.densityScore < 75)) {
+    cards.push({
+      tag: "对标 3",
+      title: "看服务过程怎么拍",
+      body: "不要只看装修和环境，重点看它有没有连续展示检测、操作、细节特写、顾客状态和结果反馈。",
+    });
+  }
+  if (/团购|转化|收口|预约|下单/.test(all) || !formula.includes("团购转化")) {
+    cards.push({
+      tag: "对标 4",
+      title: "看团购收口怎么出现",
+      body: "观察价格、权益、预约动作在什么时候出现，避免把优惠孤立放在结尾才讲。",
+    });
+  }
+
+  if (!cards.length) {
+    cards.push({
+      tag: "对标",
+      title: "看同品类优秀案例",
+      body: "这条素材方向基本成立，去官方库重点看同品类案例的节奏密度和结尾转化表达。",
+    });
+  }
+
+  return cards.slice(0, 4);
+}
+
 function renderAnalysis(result) {
   if (state.videoLoaded && (state.transcriptBusy || state.visionBusy) && !result.ready) {
     renderPendingPanels();
@@ -1323,6 +1392,7 @@ function renderAnalysis(result) {
   }
   renderActions(result.actions);
   renderRewriteCards(result.rewritePlan);
+  renderBenchmarkGuidance(buildBenchmarkGuidance(result));
   elements.reportOutput.value = result.rewritten;
 }
 
@@ -1468,6 +1538,22 @@ function renderRewriteCards(plan) {
   elements.rewriteCards.innerHTML = issueCards + copyCard;
 }
 
+function renderBenchmarkGuidance(cards) {
+  if (!elements.benchmarkList) return;
+  const safeCards = Array.isArray(cards) && cards.length ? cards : buildBenchmarkGuidance({ ready: false });
+  elements.benchmarkList.innerHTML = safeCards.map((card) => `
+    <article class="benchmark-card">
+      <span>${escapeHtml(card.tag)}</span>
+      <strong>${escapeHtml(card.title)}</strong>
+      <p>${escapeHtml(card.body)}</p>
+    </article>
+  `).join("") + `
+    <a class="benchmark-action" href="${officialBenchmarkUrl}" target="_blank" rel="noopener">
+      去官方库看对标视频
+    </a>
+  `;
+}
+
 function renderPendingPanels() {
   if (!state.videoLoaded) return;
 
@@ -1509,6 +1595,13 @@ function renderPendingPanels() {
       <p><span class="loading-line"></span></p>
     </article>
   `;
+  renderBenchmarkGuidance([
+    {
+      tag: "匹配中",
+      title: "正在匹配官方对标方向",
+      body: "系统会根据问题点判断该看开头、过程画面、团购收口还是完整框架。",
+    },
+  ]);
   elements.reportOutput.value = [
     "正在提取普通话文案和拍摄素材...",
     "识别完成后将生成：",
@@ -1590,6 +1683,7 @@ function renderEmpty() {
   elements.understandingLoading.hidden = true;
   elements.actionList.innerHTML = "";
   elements.rewriteCards.innerHTML = "";
+  renderBenchmarkGuidance(buildBenchmarkGuidance({ ready: false }));
   elements.reportOutput.value = "";
 }
 
