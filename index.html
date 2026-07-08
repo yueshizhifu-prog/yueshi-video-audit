@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>玥时之肤运营系统</title>
-  <link rel="stylesheet" href="./styles.css?v=20260704-fast-evidence-v2" />
+  <link rel="stylesheet" href="./styles.css?v=20260708-benchmark-v1" />
   </head>
   <body>
     <main class="app-shell">
@@ -22,6 +22,7 @@
           <span class="contact-chip">联系XXXX</span>
           <button id="analyzeBtn" class="button primary">开始分析</button>
           <button id="copyBtn" class="button secondary">复制结果</button>
+          <a class="button secondary benchmark-top-link" href="https://lifexue.com/case/list/marketvideo?enter_method=tab" target="_blank" rel="noopener">官方对标库</a>
         </div>
       </header>
 
@@ -54,6 +55,11 @@
             </label>
             <div id="uploadWarning" class="upload-warning" hidden></div>
             <div class="mobile-upload-note">上传后自动生成投前判断、优化建议和成品文案</div>
+            <a class="benchmark-entry" href="https://lifexue.com/case/list/marketvideo?enter_method=tab" target="_blank" rel="noopener">
+              <span>官方对标库</span>
+              <strong>看抖音生活服务官方案例</strong>
+              <small>带着开头、画面、团购收口三个问题去看</small>
+            </a>
             <div class="mobile-result-preview" aria-label="生成结果预览">
               <article>
                 <strong>投前判断</strong>
@@ -167,6 +173,16 @@
             </div>
             <div id="actionList" class="action-list"></div>
             <div id="rewriteCards" class="rewrite-cards"></div>
+            <section class="benchmark-panel" aria-label="官方对标参考">
+              <div class="benchmark-head">
+                <div>
+                  <span>官方对标参考</span>
+                  <strong>看什么，怎么对标</strong>
+                </div>
+                <a href="https://lifexue.com/case/list/marketvideo?enter_method=tab" target="_blank" rel="noopener">打开官方库</a>
+              </div>
+              <div id="benchmarkList" class="benchmark-list"></div>
+            </section>
             <textarea id="reportOutput" readonly></textarea>
           </section>
         </aside>
@@ -174,7 +190,7 @@
     </main>
 
     <canvas id="captureCanvas" hidden></canvas>
-  <script src="./config.js?v=20260704-fast-evidence-v2"></script>
-  <script src="./app.js?v=20260704-fast-evidence-v2"></script>
+  <script src="./config.js?v=20260708-benchmark-v1"></script>
+  <script src="./app.js?v=20260708-benchmark-v1"></script>
   </body>
 </html>
