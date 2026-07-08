@@ -692,7 +692,14 @@ function buildResultFromBailianAnalysis(analysis, transcript, visualText) {
   const metrics = normalizeRemoteMetrics(analysis.preflight, localMetrics);
   const verdict = normalizeRemoteVerdict(analysis.preflight, metrics);
   const risks = normalizeRemoteRisks(analysis.preflight, inferRisks(structure, intent, metrics, transcript, visual));
-  const rewritePlan = normalizeRemoteRewrite(analysis.rewrite, buildRewriteSuggestion(structure, intent, [], metrics, risks, visual));
+  const rewritePlan = deepenRewritePlan(
+    normalizeRemoteRewrite(analysis.rewrite, buildRewriteSuggestion(structure, intent, [], metrics, risks, visual)),
+    structure,
+    intent,
+    metrics,
+    risks,
+    visual
+  );
 
   return {
     transcript,
@@ -763,10 +770,15 @@ function normalizeRemoteVerdict(preflight, metrics) {
 function normalizeRemoteRisks(preflight, fallback) {
   const rows = preflight && preflight.risks;
   if (!Array.isArray(rows) || !rows.length) return fallback;
-  return rows.map((row) => [
+  const remote = rows.map((row) => [
     cleanFallback(row && row.title, "投前风险"),
     cleanFallback(row && row.detail, "模型未返回风险说明"),
   ]);
+  const merged = [...remote];
+  for (const risk of fallback) {
+    if (!merged.some((item) => item[0] === risk[0])) merged.push(risk);
+  }
+  return merged.slice(0, 5);
 }
 
 function normalizeRemoteRewrite(rewrite, fallback) {
@@ -920,7 +932,9 @@ function analyzeVideo() {
   const risks = inferRisks(structure, intent, metrics, transcript, visual);
   const ready = isLinkedUnderstandingReady(transcript, visual);
   const actions = ready ? inferOptimizationSuggestions(risks, structure, intent, metrics, visual) : [];
-  const rewritePlan = ready ? buildRewriteSuggestion(structure, intent, actions, metrics, risks, visual) : emptyRewritePlan();
+  const rewritePlan = ready
+    ? deepenRewritePlan(buildRewriteSuggestion(structure, intent, actions, metrics, risks, visual), structure, intent, metrics, risks, visual)
+    : emptyRewritePlan();
   const rewritten = ready ? rewritePlan.text : "";
 
   const result = {
@@ -1195,8 +1209,15 @@ function inferRisks(structure, intent, metrics, transcript, visual) {
   if (!structure.formula.includes("团购转化")) {
     risks.push(["转化收口弱", "结尾没有明确团购、预约或到店动作。"]);
   }
+  const fullText = `${transcript}\n${structure.formula.join(" ")}\n${visual.text}`;
+  if (!/([0-9]+(\.[0-9]+)?元|团购|套餐|次卡|券|折|优惠|权益|预约)/.test(fullText)) {
+    risks.push(["团购权益不具体", "团购视频不能只讲项目，要让用户知道价格、权益、适用条件或预约动作。"]);
+  }
+  if (!/适合|上班|宝妈|女生|学生|情侣|附近|到店|在家|周末|熬夜|通勤/.test(fullText)) {
+    risks.push(["人群场景不明确", "爆款视频通常会让用户迅速代入某个场景或身份，现在缺少明确的谁该买、为什么现在买。"]);
+  }
   if (metrics.score >= 78) risks.push(["放量边界", "即使可测，也先小预算看流速和支付成本。"]);
-  return risks.slice(0, 3);
+  return risks.slice(0, 5);
 }
 
 function inferOptimizationSuggestions(risks, structure, intent, metrics, visual) {
@@ -1296,6 +1317,82 @@ function buildRewriteSuggestion(structure, intent, actions, metrics, risks, visu
     copy,
     execution,
     text,
+  };
+}
+
+function deepenRewritePlan(plan, structure, intent, metrics, risks, visual) {
+  if (!plan || !plan.copy) return plan;
+  const intentMap = Object.fromEntries(intent || []);
+  const product = cleanFallback(intentMap["推广商品"], "当前团购项目");
+  const discount = cleanFallback(intentMap["优惠活动"], "团购权益/套餐价格");
+  const pain = splitField(intentMap["用户痛点"])[0] || "用户痛点";
+  const benefit = splitField(intentMap["产品卖点"])[0] || "核心效果";
+  const scene = cleanFallback(intentMap["适用场景"], "到店体验场景");
+  const currentFramework = structure.formula.filter((item) => !isVisualFormulaItem(item)).join(" + ") || "待识别";
+  const visualChain = visual.formula.join(" + ") || "待识别";
+  const riskText = risks.map(([title]) => title).join("、") || "暂无明显高风险";
+
+  const diagnosticCards = [
+    {
+      label: "问题 1",
+      title: "爆款入口不只看好看，要看前三秒是否有停留理由",
+      body: structure.hasPainOpening
+        ? `当前有痛点入口，但要把“${pain}”说得更具体；开头同时露出项目或权益，用户才知道为什么继续看。`
+        : `开头需要先打“${pain}”，不要先铺环境或泛泛说优惠；前三秒要同时完成痛点、项目、权益中的至少两项。`,
+    },
+    {
+      label: "问题 2",
+      title: "信息充分度不够会影响团购决策",
+      body: `团购内容要讲清“${product}”是什么、解决什么、适合谁、有什么权益。当前要把“${discount}”提前到中前段，不要只在结尾才露出。`,
+    },
+    {
+      label: "问题 3",
+      title: "画面证明要承接购买理由",
+      body: `画面链路现在是“${visualChain}”。建议按“真实场景-服务过程-细节特写-顾客状态-团购收口”推进，每一段都服务一个购买理由。`,
+    },
+    {
+      label: "问题 4",
+      title: "团购成交闭环要完整",
+      body: `成交流程必须闭合：${pain} -> ${benefit} -> ${product} -> ${discount} -> ${scene} -> 点团购预约。缺任何一环，投流放大后点击和支付都会弱。`,
+    },
+    {
+      label: "问题 5",
+      title: "当前素材放大风险",
+      body: `投前分 ${metrics.score}，主要风险是：${riskText}。如果要投，先按小预算验证 3 秒停留、点击率和支付成本，不要直接放大。`,
+    },
+  ];
+
+  const copy = plan.copy.length >= 4 ? plan.copy : buildRewriteSuggestion(structure, intent, [], metrics, risks, visual).copy;
+  const execution = [
+    { label: "1", title: "首屏停留", body: `镜头先给痛点或结果字幕，口播第一句只说“${pain}的人先看”。` },
+    { label: "2", title: "项目和权益", body: `第二段把“${product}”和“${discount}”同屏呈现，避免用户看完不知道卖什么。` },
+    { label: "3", title: "过程证明", body: "连续展示服务动作、细节特写、顾客状态，不要长时间停留在门头或空镜。" },
+    { label: "4", title: "人群场景", body: `点名“${scene}”，让用户知道这条团购适合自己的哪种需求。` },
+    { label: "5", title: "团购收口", body: "最后一句只做预约动作：点团购、看权益、到店体验，不再新增卖点。" },
+  ];
+
+  return {
+    cards: diagnosticCards,
+    copy,
+    execution,
+    text: [
+      "爆款视频判断：",
+      `1. 当前框架：${currentFramework}`,
+      "2. 标准框架：痛点停留 + 项目承接 + 过程证明 + 权益刺激 + 人群场景 + 团购预约",
+      "3. 官方对标标准：画面舒适、声音自然、信息充分；团购内容要让用户看懂价格/权益/服务/适用人群。",
+      "",
+      "团购成交闭环：",
+      `${pain} -> ${benefit} -> ${product} -> ${discount} -> ${scene} -> 点团购预约`,
+      "",
+      "问题分析：",
+      ...diagnosticCards.map((card) => `${card.label}. ${card.title}：${card.body}`),
+      "",
+      "修改后成品文案：",
+      ...copy.map((line, index) => `${index + 1}. ${line}`),
+      "",
+      "执行标准：",
+      ...execution.map((item) => `${item.label}. ${item.title}：${item.body}`),
+    ].join("\n"),
   };
 }
 
