@@ -575,6 +575,12 @@ textarea:focus {
   line-height: 1;
 }
 
+.score-box strong.score-label {
+  font-size: 25px;
+  line-height: 1.18;
+  letter-spacing: 0;
+}
+
 .meter {
   height: 14px;
   overflow: hidden;
